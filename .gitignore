@@ -1,0 +1,4 @@
+build/*
+mtrsk
+*.out
+*.txt
