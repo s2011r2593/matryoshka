@@ -3,19 +3,12 @@
 #include <math.h>
 
 #include "config.h"
+#include "types.h"
 
 #include "matryoshka_util.h"
+#include "helpers.h"
 
-void* Allocate(size_t n_bytes) {
-    void* ptr = malloc(n_bytes);
-    if (ptr == 0) {
-        printf("Failed to allocate memory\n");
-        exit(-1);
-    }
-    return ptr;
-}
-
-void GenerateNetwork(m_net* net_ptr) {
+void GenerateNetwork(matNet* net_ptr) {
     cudaGetDeviceCount(&(net_ptr->n_dev));
     int* dev_ids = (int*) Allocate(net_ptr->n_dev * sizeof(int));
     net_ptr->comms = (ncclComm_t*) Allocate(net_ptr->n_dev * sizeof(ncclComm_t));
@@ -47,7 +40,7 @@ void GenerateNetwork(m_net* net_ptr) {
     return;
 }
 
-void DestroyNetwork(m_net* net_ptr) {
+void DestroyNetwork(matNet* net_ptr) {
     for (int i = 0; i < net_ptr->n_dev; i++) {
         cudaSetDevice(i);
         cudaFree(net_ptr->buffers[i]);
@@ -72,7 +65,20 @@ void DestroyNetwork(m_net* net_ptr) {
     free(net_ptr->comms);
 }
 
-void P2PCall(m_net* n, int from, int to, int msg_size, int n_iter) {
+void GenerateSorter(linkSorter* s_ptr) {
+    for (int i = 0; i < NUM_LINK_TYPES; i++) {
+        s_ptr->links[i].edf = (float*) Allocate(TESTING_ITERS * sizeof(float));
+    }
+    s_ptr->n_links = 0;
+}
+
+void DestroySorter(linkSorter* s_ptr) {
+    for (int i = 0; i < NUM_LINK_TYPES; i++) {
+        free(s_ptr->links[i].edf);
+    }
+}
+
+void P2PCall(matNet* n, int from, int to, int msg_size, int n_iter) {
     for (int i = n_iter; i > 0; i--) {
         ncclGroupStart();
         ncclSend(n->buffers[from], msg_size, ncclUint8, to, n->comms[from], n->streams[from]);
@@ -80,7 +86,7 @@ void P2PCall(m_net* n, int from, int to, int msg_size, int n_iter) {
         ncclGroupEnd();
     }
 }
-void ProfileP2P(m_net* n, int from, int to, int msg_size, int n_iter) {
+void ProfileP2P(matNet* n, int from, int to, int msg_size, int n_iter) {
     cudaEventRecord(n->timers[from][START], n->streams[from]);
     cudaEventRecord(n->timers[to][START], n->streams[to]);
 
